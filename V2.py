@@ -79,7 +79,16 @@ class Head(nn.Module):
         v = self.value(x)
         out = weights @ v
         return out
-        
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        # nn.ModuleList is used to store a list of nn.Module instances and useful when you want to iterate through a list of nn.Module instances
+
+    def forward(self, x):
+        return torch.cat([h(x) for h in self.heads], dim=-1)  # concatenate the heads in C dimension
+
 
 # super simple bigram model
 class BigramLanguageModel(nn.Module):
@@ -89,7 +98,7 @@ class BigramLanguageModel(nn.Module):
         # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
-        self.sa_head = Head(n_embd)
+        self.sa_head = MultiHeadAttention(num_heads=4, head_size=n_embd // 4)
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets=None):
