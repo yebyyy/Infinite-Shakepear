@@ -84,10 +84,14 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, num_heads, head_size):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(n_embd, n_embd )
         # nn.ModuleList is used to store a list of nn.Module instances and useful when you want to iterate through a list of nn.Module instances
 
     def forward(self, x):
-        return torch.cat([h(x) for h in self.heads], dim=-1)  # concatenate the heads in C dimension
+        out = torch.cat([h(x) for h in self.heads], dim=-1)
+        out = self.proj(out)
+        return out
+        # concatenate the heads in C dimension
 
 
 
@@ -95,14 +99,28 @@ class FeedForward(nn.Module):
     def __init__(self, n_embd):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(n_embd, n_embd),
+            nn.Linear(n_embd, 4 * n_embd),
             nn.ReLU(),
+            nn.Linear(4 * n_embd, n_embd),  # Projection Layer
         )
     
     def forward(self, x):
         # this is on a per token level so that the tokens can think about information individually
         return self.net(x)
     
+
+class Block(nn.Module):
+    def __init__(self, n_embd, n_head):
+        super().__init__()
+        head_size = n_embd // n_head
+        self.sa_head = MultiHeadAttention(num_heads=4, head_size=head_size)
+        self.ffwd = FeedForward(n_embd)
+
+    def forward(self, x):
+        x = x + self.sa_head(x)
+        x = x + self.ffwd(x)
+        return x
+
 
 # super simple bigram model
 class BigramLanguageModel(nn.Module):
@@ -112,8 +130,15 @@ class BigramLanguageModel(nn.Module):
         # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
-        self.sa_head = MultiHeadAttention(num_heads=4, head_size=n_embd // 4)
-        self.ffwd = FeedForward(n_embd)
+        # self.sa_head = MultiHeadAttention(num_heads=4, head_size=n_embd // 4)
+        # self.ffwd = FeedForward(n_embd)
+        self.blocks = nn.Sequential(
+            Block(n_embd, n_head=4),
+            Block(n_embd, n_head=4),
+            Block(n_embd, n_head=4),
+        )
+        # However, only changing the model from a single block to multiple blocks does not improve the performance of the model.
+        # As the model gets deeper, the NN starts to suffer from optimization issues, such as vanishing gradients or exploding gradients.
         self.lm_head = nn.Linear(n_embd, vocab_size)
 
     def forward(self, idx, targets=None):
@@ -122,8 +147,7 @@ class BigramLanguageModel(nn.Module):
         token_embedding = self.token_embedding_table(idx) # (B,T,C)
         position_embedding = self.position_embedding_table(torch.arange(T, device=device)) # (T,C)
         x = token_embedding + position_embedding
-        x = self.sa_head(x)  # (B,T,C)
-        x = self.ffwd(x)  # (B,T,C)
+        x = self.blocks(x)
         # we need this feedforward layer so that the tokens can think about what they found from the other tokens
         logits = self.lm_head(x)  # (B,T,C), note that the two Cs are not equal
 
