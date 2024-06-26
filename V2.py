@@ -2,17 +2,27 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-# hyperparameters
-batch_size = 32 # how many independent sequences will we process in parallel?
-block_size = 8 # what is the maximum context length for predictions?
+# hyperparameters before scaling up
+# batch_size = 32 # how many independent sequences will we process in parallel?
+# block_size = 8 # what is the maximum context length for predictions?
 max_iters = 5000
 eval_interval = 500
-learning_rate = 1e-3
+# learning_rate = 1e-3
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(torch.cuda.is_available())
 eval_iters = 200
-n_embd = 32
+# n_embd = 32
 # ------------
+# hyperparameters after scaling up
+batch_size = 64
+block_size = 256
+learning_rate = 3e-4
+n_embd = 384
+n_head = 6
+n_layer = 6
+dropout = 0.2
+# ------------
+
 
 torch.manual_seed(1337)
 
@@ -68,6 +78,8 @@ class Head(nn.Module):
         self.value = nn.Linear(n_embd, head_size, bias=False)
         self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))  # block_size is T
         # buffer is a tensor that is not considered a model parameter, and therefore is not trainable and does not affect backpropagation
+        self.dropout = nn.Dropout(dropout)
+
 
     def forward(self, x):
         B, T, C = x.shape
@@ -76,6 +88,7 @@ class Head(nn.Module):
         weights = (q @ k.transpose(-2, -1)) / (C ** 0.5)
         weights = weights.masked_fill(self.tril[:T, :T] == 0, float('-inf'))
         weights = F.softmax(weights, dim=-1)
+        weights = self.dropout(weights)
         v = self.value(x)
         out = weights @ v
         return out
@@ -85,6 +98,7 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
         self.proj = nn.Linear(n_embd, n_embd )
+        self.dropout = nn.Dropout(dropout)
         # nn.ModuleList is used to store a list of nn.Module instances and useful when you want to iterate through a list of nn.Module instances
 
     def forward(self, x):
@@ -102,7 +116,8 @@ class FeedForward(nn.Module):
             nn.Linear(n_embd, 4 * n_embd),
             nn.ReLU(),
             nn.Linear(4 * n_embd, n_embd),  # Projection Layer
-        )
+            nn.Dropout(dropout))
+        
     
     def forward(self, x):
         # this is on a per token level so that the tokens can think about information individually
@@ -135,11 +150,9 @@ class BigramLanguageModel(nn.Module):
         # self.sa_head = MultiHeadAttention(num_heads=4, head_size=n_embd // 4)
         # self.ffwd = FeedForward(n_embd)
         self.blocks = nn.Sequential(
-            Block(n_embd, n_head=4),
-            Block(n_embd, n_head=4),
-            Block(n_embd, n_head=4),
-            nn.LayerNorm(n_embd)
+            *[Block(n_embd, n_head) for _ in range(n_layer)]  # The * is for unpacking the []
         )
+        self.ln_f = nn.LayerNorm(n_embd)
         # However, only changing the model from a single block to multiple blocks does not improve the performance of the model.
         # As the model gets deeper, the NN starts to suffer from optimization issues, such as vanishing gradients or exploding gradients.
         self.lm_head = nn.Linear(n_embd, vocab_size)
