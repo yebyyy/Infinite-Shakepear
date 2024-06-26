@@ -1,7 +1,7 @@
 # Infinite Shakespear
-This repo is for building a transformer model that is able to generate infinite shakespear-like work
+This is a decoder only transformer, similar to a GPT structure that generates Shakespear-like text.
 
-This is a decoder only transformer, similar to a GPT structure.
+The Theoretical part of the model follows the decoder structure explained in the famous [Attention is All You Need](https://arxiv.org/pdf/1706.03762) paper.
 
 Other than the basic **Multihead Self Attention** and **Feedforward** Structure, also implemented **LayerNorm**, **Residual Connections** from [Deep Residual Learning for Image Recognition](https://arxiv.org/pdf/1512.03385), and **Dropout** from [Dropout: A Simple Way to Prevent Neural Networks from Overfitting](https://www.cs.toronto.edu/~rsalakhu/papers/srivastava14a.pdf)
 
