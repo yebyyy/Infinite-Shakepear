@@ -115,10 +115,12 @@ class Block(nn.Module):
         head_size = n_embd // n_head
         self.sa_head = MultiHeadAttention(num_heads=4, head_size=head_size)
         self.ffwd = FeedForward(n_embd)
+        self.ln1 = nn.LayerNorm(n_embd)
+        self.ln2 = nn.LayerNorm(n_embd)
 
     def forward(self, x):
-        x = x + self.sa_head(x)
-        x = x + self.ffwd(x)
+        x = x + self.sa_head(self.ln1(x))
+        x = x + self.ffwd(self.ln2(x))
         return x
 
 
@@ -136,6 +138,7 @@ class BigramLanguageModel(nn.Module):
             Block(n_embd, n_head=4),
             Block(n_embd, n_head=4),
             Block(n_embd, n_head=4),
+            nn.LayerNorm(n_embd)
         )
         # However, only changing the model from a single block to multiple blocks does not improve the performance of the model.
         # As the model gets deeper, the NN starts to suffer from optimization issues, such as vanishing gradients or exploding gradients.
